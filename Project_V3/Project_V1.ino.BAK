@@ -1,0 +1,119 @@
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "RGBLED.h"
+#include "Point.h"
+#include "ellipse.h"
+
+#define ARDUINO
+#include <QueueArray.h>
+
+#define OLED_RESET 4
+Adafruit_SSD1306 display(OLED_RESET);
+
+#define XPin A2
+#define YPin A3
+#define SCREENWIDTH 128
+#define SCREENHEIGHT 64
+
+Point<float> g_JoyStickOrigin;
+
+ellipse g_ellipse(Point<int>(SCREENWIDTH/2, SCREENHEIGHT/2), Point<int>(SCREENWIDTH/2, SCREENHEIGHT/2));
+
+Point<int> MakeRandPixel();
+
+Point<int> g_RandPixel;
+Point<float> g_LastPixelPos(SCREENWIDTH/2, SCREENHEIGHT/2);
+int Qlen=1;
+
+QueueArray <Point<int>> g_Snake(50);
+
+Point<int> MakeRandPixel(){
+  Point<int> RandPixel(random(SCREENWIDTH),random(SCREENHEIGHT));
+  while(!g_ellipse.IsInside(RandPixel)){
+    RandPixel.Set(random(SCREENWIDTH),random(SCREENHEIGHT));
+  }
+  return RandPixel;
+}
+
+#define REDPIN 6
+#define GREENPIN 9
+#define BLUEPIN 11
+RGBLED g_myLED(REDPIN, GREENPIN, BLUEPIN, COMMON_ANNODE);
+
+void setup() {
+  randomSeed(analogRead(A1));
+  g_RandPixel= MakeRandPixel();
+  display.begin(SSD1306_SWITCHCAPVCC,0x3C);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0,0);
+  pinMode(XPin,INPUT);
+  pinMode(YPin,INPUT);
+
+//  Serial.begin(115200);                     //<------------- its this line
+
+  g_JoyStickOrigin.Set(analogRead(YPin),analogRead(XPin));
+  
+  display.println("Collect the dots!");
+  display.display();
+  delay(3000);
+  display.clearDisplay();
+  display.setCursor(0,0);
+  
+  
+  g_myLED.SetColor(255,0,0); //Red On
+  display.println("Ready");
+  display.display();
+  delay(1000);
+  
+  g_myLED.SetColor(255,255,0); //Yellow On
+  display.setTextSize(2);
+  display.println("Set");
+  display.display();
+  delay(1000);  
+  
+  g_myLED.SetColor(0,255,0);//Green On
+  display.setTextSize(3);
+  display.println("Go!");
+  display.display();
+  delay(1000);
+  
+  g_myLED.SetColor(0,0,0);//turn off LED
+  display.clearDisplay();
+  display.display();
+  
+  Point<int> NextPixelPosInt(round(g_LastPixelPos.GetX()), round(g_LastPixelPos.GetY()));
+  g_Snake.enqueue(NextPixelPosInt);
+}
+
+#define MAX_SPEED 1
+Point<float> g_JoyStickScalar(512/MAX_SPEED, 512/MAX_SPEED);
+
+
+void loop() {
+  Point<float> JoyStickVal(analogRead(YPin), analogRead(XPin));
+  JoyStickVal*=Point<float> (-1,-1);
+  JoyStickVal+=g_JoyStickOrigin;
+  Point<float> CurrentSpeed = JoyStickVal/g_JoyStickScalar;
+  Point<float> NextPixelPos = g_LastPixelPos + CurrentSpeed;
+  NextPixelPos.Constrain(Point<float>(0, 63), Point<float>(127, 0));
+  
+  //Joystick touches random pixel
+  Point<int> NextPixelPosInt(round(NextPixelPos.GetX()), round(NextPixelPos.GetY()));
+    
+  if(NextPixelPosInt == g_RandPixel){
+    g_RandPixel = MakeRandPixel();
+    Qlen++;
+  }
+
+  display.clearDisplay();
+  display.drawPixel(g_RandPixel.GetX(), g_RandPixel.GetY(), WHITE);
+  display.drawPixel(NextPixelPosInt.GetX(), NextPixelPosInt.GetY(), WHITE);
+
+  g_LastPixelPos = NextPixelPos;
+    
+  display.display();
+}
